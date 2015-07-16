@@ -1,4 +1,4 @@
-package main
+package tps
 
 import (
 	"errors"
@@ -58,7 +58,7 @@ func NewReport(
 	return report
 }
 
-func (m *Report) Content(
+func (r *Report) Content(
 	x int,
 	y int,
 	blockName string,
@@ -69,55 +69,55 @@ func (m *Report) Content(
 	var style Style
 	var ok bool
 
-	if block, ok = m.Blocks[blockName]; ok == false {
+	if block, ok = r.Blocks[blockName]; ok == false {
 		log.Fatalf("Could not find block name in Report: %s", blockName)
 		os.Exit(1)
 	}
-	if style, ok = m.Styles[styleName]; ok == false {
+	if style, ok = r.Styles[styleName]; ok == false {
 		log.Fatalf("Could not find style name in Report: %s", styleName)
 		os.Exit(2)
 	}
 
-	pageX := m.Margin
-	pageX += m.ColumnWidth * float64(x-1)
-	pageX += m.GutterWidth * float64(x-1)
+	pageX := r.Margin
+	pageX += r.ColumnWidth * float64(x-1)
+	pageX += r.GutterWidth * float64(x-1)
 
-	pageY := m.Margin
-	pageY += m.LineHeight * float64(y-1)
+	pageY := r.Margin
+	pageY += r.LineHeight * float64(y-1)
 
-	cellWidth := m.ColumnWidth * float64(block.Width)
-	cellWidth += m.GutterWidth * float64(block.Width-1)
-	cellHeight := m.LineHeight * float64(block.Height)
+	cellWidth := r.ColumnWidth * float64(block.Width)
+	cellWidth += r.GutterWidth * float64(block.Width-1)
+	cellHeight := r.LineHeight * float64(block.Height)
 
-	m.Pdf.SetFont(style.FontFamily, style.FontStyle, style.FontSize)
-	m.Pdf.SetXY(pageX, pageY)
-	m.Pdf.MultiCell(cellWidth, cellHeight, content, "", style.Alignment, false)
+	r.Pdf.SetFont(style.FontFamily, style.FontStyle, style.FontSize)
+	r.Pdf.SetXY(pageX, pageY)
+	r.Pdf.MultiCell(cellWidth, cellHeight, content, "", style.Alignment, false)
 
 	lineCount := 0
 	contentLines := strings.Split(content, "\n")
 	for _, line := range contentLines {
-		stringWidth := m.Pdf.GetStringWidth(line)
+		stringWidth := r.Pdf.GetStringWidth(line)
 		lineCount += int(math.Ceil(stringWidth / cellWidth))
 	}
 	lineCount *= block.Height
 	return lineCount
 }
 
-func (m *Report) CalculateColumns() {
-	width, _ := m.Pdf.GetPageSize()
-	width -= m.Margin * 2
-	width -= ((m.ColumnCount - 1) * m.GutterWidth)
-	m.ColumnWidth = width / m.ColumnCount
+func (r *Report) CalculateColumns() {
+	width, _ := r.Pdf.GetPageSize()
+	width -= r.Margin * 2
+	width -= ((r.ColumnCount - 1) * r.GutterWidth)
+	r.ColumnWidth = width / r.ColumnCount
 }
 
-func (m *Report) AddStyle(
+func (r *Report) AddStyle(
 	name string,
 	fontFamily string,
 	fontStyle string,
 	fontSize float64,
 	alignment string,
 ) {
-	m.Styles[name] = Style{
+	r.Styles[name] = Style{
 		FontFamily: fontFamily,
 		FontStyle:  fontStyle,
 		FontSize:   fontSize,
@@ -125,8 +125,8 @@ func (m *Report) AddStyle(
 	}
 }
 
-func (m *Report) AddBlock(name string, width, height int) {
-	m.Blocks[name] = Block{
+func (r *Report) AddBlock(name string, width, height int) {
+	r.Blocks[name] = Block{
 		Width:  width,
 		Height: height,
 	}
