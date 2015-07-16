@@ -5,12 +5,7 @@ import (
 )
 
 type Report struct {
-	ColumnCount      float64
-	ColumnWidth      float64
-	GutterCount      float64
-	GutterWidth      float64
-	LineHeight       float64
-	Margin           float64
+	Grid             Grid
 	Pdf              *gofpdf.Fpdf
 	Styles           map[string]Style
 	Blocks           map[string]Block
