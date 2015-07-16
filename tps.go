@@ -1,8 +1,9 @@
 package tps
 
 import (
-	"errors"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"os"
@@ -11,32 +12,6 @@ import (
 
 	"github.com/jung-kurt/gofpdf"
 )
-
-type Report struct {
-	ColumnCount      float64
-	ColumnWidth      float64
-	GutterCount      float64
-	GutterWidth      float64
-	LineHeight       float64
-	Margin           float64
-	Pdf              *gofpdf.Fpdf
-	Styles           map[string]Style
-	Blocks           map[string]Block
-	FontSourcePath   string
-	FontCompiledPath string
-}
-
-type Style struct {
-	FontFamily string
-	FontStyle  string
-	FontSize   float64
-	Alignment  string
-}
-
-type Block struct {
-	Width  int
-	Height int
-}
 
 func NewReport(
 	orientation string,
@@ -140,12 +115,10 @@ func (r *Report) AddFont(familyName, styleName, filename, encoding string) error
 	}
 	// auto compiles
 	if path.Ext(filename) == ".json" {
-		if r.IsCompiledFont(filename) {
+		if r.IsCompiledFile(filename) {
 			r.Pdf.AddFont(familyName, styleName, filename)
 		} else {
-			return errors.New(
-				fmt.Sprintf("Cache font file not found: %s", filename),
-			)
+			return fmt.Errorf("Cache font file not found: %s", filename)
 		}
 	} else {
 		if r.IsSourcedFont(filename) {
@@ -155,9 +128,7 @@ func (r *Report) AddFont(familyName, styleName, filename, encoding string) error
 			}
 			r.Pdf.AddFont(familyName, styleName, compiledFilename)
 		} else {
-			return errors.New(
-				fmt.Sprintf("Source font file not found: %s", filename),
-			)
+			return fmt.Errorf("Source font file not found: %s", filename)
 		}
 	}
 	return nil
@@ -174,17 +145,45 @@ func (r *Report) PrepareFontCompiledPath() error {
 	return nil
 }
 
+func (r *Report) CompileEncoding(encoding string) (filename string, err error) {
+	filename = path.Join(r.FontCompiledPath, encoding+".map")
+	if r.IsCompiledFile(filename) {
+		return
+	}
+	if data, ok := encodings[encoding]; ok {
+		file, err := os.Create(filename)
+		if err != nil {
+			err = fmt.Errorf("Could not open file to compile encoding file: %v", err)
+			return filename, err
+		}
+		defer file.Close()
+		reader := strings.NewReader(data)
+		decoder := base64.NewDecoder(base64.StdEncoding, reader)
+		_, err = io.Copy(file, decoder)
+		if err != nil {
+			err = fmt.Errorf("Encoding failed to copy to file: %v", err)
+			return filename, err
+		}
+	} else {
+		err = fmt.Errorf("Encoding not supported: %s", encoding)
+	}
+	return
+}
+
 func (r *Report) CompileFont(filename, encoding string) (string, error) {
 	fontFilename := path.Join(r.FontSourcePath, filename)
-	encodingFilename := path.Join(r.FontSourcePath, encoding+".map")
-	err := gofpdf.MakeFont(fontFilename, encodingFilename, r.FontCompiledPath, nil, true)
 	// replacing ext with json
 	extLen := len(path.Ext(filename))
 	compiledFilename := filename[:len(filename)-extLen] + ".json"
+	encodingFilename, err := r.CompileEncoding(encoding)
+	if err != nil {
+		return compiledFilename, err
+	}
+	err = gofpdf.MakeFont(fontFilename, encodingFilename, r.FontCompiledPath, nil, true)
 	return compiledFilename, err
 }
 
-func (r *Report) IsCompiledFont(filename string) bool {
+func (r *Report) IsCompiledFile(filename string) bool {
 	_, err := os.Stat(path.Join(r.FontCompiledPath, filename))
 	return !os.IsNotExist(err)
 }
