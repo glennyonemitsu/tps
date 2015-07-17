@@ -13,7 +13,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"os"
 	"path"
