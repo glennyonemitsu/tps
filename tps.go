@@ -5,7 +5,8 @@
 // For example, a grid specification includes the page margins, # of columns,
 // the gutter size (the space between columns), and line height. Using this
 // tps calculates a grid coordinate system similar to a speadsheet. Content
-// placement is then done with the row, column, and cell width.
+// placement is then done with the row, column, and width (determined by the #
+// of horizontal cells to take up).
 package tps
 
 import (
