@@ -1,3 +1,11 @@
+// tps is a package to hide a lot of the complicated details of creating PDFs
+// with fpdf. It relies on a grid specification and content placement is similar
+// to a spreadsheet.
+//
+// For example, a grid specification includes the page margins, # of columns,
+// the gutter size (the space between columns), and line height. Using this
+// tps calculates a grid coordinate system similar to a speadsheet. Content
+// placement is then done with the row, column, and cell width.
 package tps
 
 import (
@@ -13,6 +21,34 @@ import (
 	"github.com/jung-kurt/gofpdf"
 )
 
+// Report is the main struct type that holds all information to generate a PDF.
+type Report struct {
+	Grid             Grid
+	Pdf              *gofpdf.Fpdf
+	Styles           map[string]Style
+	Blocks           map[string]Block
+	FontSourcePath   string
+	FontCompiledPath string
+}
+
+// Style is a specification of the content visuals. All content placement
+// requires a style name, and cannot be provided dynamically.
+type Style struct {
+	FontFamily string
+	FontStyle  string
+	FontSize   float64
+	Alignment  string
+}
+
+// Block is a specification of a line placed in the PDF. The Width and Height
+// fields are integers which mean they are the multiples of Grid specs. Width
+// indicates # of columns plus the gutters between columns, and Height
+// indicates multiples of Grid.LineHeight.
+type Block struct {
+	Width  int
+	Height int
+}
+
 func NewReport() *Report {
 	report := new(Report)
 	report.Styles = make(map[string]Style)
@@ -20,24 +56,30 @@ func NewReport() *Report {
 	return report
 }
 
+// Place a string based on the x, y coordinates on the grid, using the named
+// block and style specifications. Returns the # of lines (different from
+// Block.Height) taken up by this call to help dynamically place following
+// content.
 func (r *Report) Content(
 	x int,
 	y int,
 	blockName string,
 	styleName string,
 	content string,
-) int {
+) (lineCount int, err error) {
 	var block Block
 	var style Style
 	var ok bool
 
+	lineCount = 0
+
 	if block, ok = r.Blocks[blockName]; ok == false {
-		log.Fatalf("Could not find block name in Report: %s", blockName)
-		os.Exit(1)
+		err = fmt.Errorf("Could not find block name in Report: %s", blockName)
+		return lineCount, err
 	}
 	if style, ok = r.Styles[styleName]; ok == false {
-		log.Fatalf("Could not find style name in Report: %s", styleName)
-		os.Exit(2)
+		err = fmt.Errorf("Could not find style name in Report: %s", styleName)
+		return lineCount, err
 	}
 
 	pageX := r.Grid.Margin
@@ -55,20 +97,28 @@ func (r *Report) Content(
 	r.Pdf.SetXY(pageX, pageY)
 	r.Pdf.MultiCell(cellWidth, cellHeight, content, "", style.Alignment, false)
 
-	lineCount := 0
 	contentLines := strings.Split(content, "\n")
 	for _, line := range contentLines {
 		stringWidth := r.Pdf.GetStringWidth(line)
 		lineCount += int(math.Ceil(stringWidth / cellWidth))
 	}
 	lineCount *= block.Height
-	return lineCount
+	return lineCount, nil
 }
 
+// AddPage creates new page in the report. The previous page is now set if it
+// exists, and all placement will take place in this new page.
 func (r *Report) AddPage() {
 	r.Pdf.AddPage()
 }
 
+// AddStyle adds a new style to use when placing content in this report.
+//
+// All specs are set. So even small differences will require different styles.
+// An example set of styles can look like the following:
+//
+//   r.AddStyle("header", "OpenSans", "", 24, "LT")
+//   r.AddStyle("subheader", "OpenSans", "", 18, "LT")
 func (r *Report) AddStyle(
 	name string,
 	fontFamily string,
@@ -84,6 +134,10 @@ func (r *Report) AddStyle(
 	}
 }
 
+// AddBlock adds a new block specification to use when placing content in this
+// report. The width and height are the number of columns and lines of the block
+// respectively. The height is the number of lineHeight per line that the
+// content placement takes up.
 func (r *Report) AddBlock(name string, width, height int) {
 	r.Blocks[name] = Block{
 		Width:  width,
@@ -91,6 +145,13 @@ func (r *Report) AddBlock(name string, width, height int) {
 	}
 }
 
+// AddFont takes a font filename and compiles it into Report.FontCompiledPath
+// with the encoding specified. It strips the filename extension and replaces
+// it with .json automatically. The extension-less string becomes the name of
+// the font family to use with Report.AddStyle(). For example:
+//
+//   r.AddFont("OpenSans-Bold.ttf", "cp1252")
+//   r.AddStyle("header", "OpenSans-Bold", "", 64, "TF")
 func (r *Report) AddFont(filename, encoding string) error {
 	var err error
 	err = r.PrepareFontCompiledPath()
@@ -98,7 +159,8 @@ func (r *Report) AddFont(filename, encoding string) error {
 		return err
 	}
 
-	familyName := stripExt(filename)
+	ext := path.Ext(filename)
+	familyName := filename[:len(filename)-len(ext)]
 
 	// auto compiles
 	if path.Ext(filename) == ".json" {
@@ -121,6 +183,7 @@ func (r *Report) AddFont(filename, encoding string) error {
 	return nil
 }
 
+// PrepareFontCompiledPath creates the "_compiled" subdirectory.
 func (r *Report) PrepareFontCompiledPath() error {
 	if _, err := os.Stat(path.Join(r.FontCompiledPath)); os.IsNotExist(err) {
 		err = os.MkdirAll(r.FontCompiledPath, os.ModeDir)
@@ -132,6 +195,8 @@ func (r *Report) PrepareFontCompiledPath() error {
 	return nil
 }
 
+// CompileEncoding creates the encoding map file in Report.FontCompiledPath so
+// the underlying Fpdf object can correctly use it to compile fonts.
 func (r *Report) CompileEncoding(encoding string) (filename string, err error) {
 	filename = path.Join(r.FontCompiledPath, encoding+".map")
 	if r.IsCompiledFile(filename) {
@@ -157,6 +222,8 @@ func (r *Report) CompileEncoding(encoding string) (filename string, err error) {
 	return
 }
 
+// CompileFont takes a font file in Report.FontSourcePath and converts it into
+// .json format if it doesn't exist in Report.FontCompiledPath.
 func (r *Report) CompileFont(filename, encoding string) (string, error) {
 	fontFilename := path.Join(r.FontSourcePath, filename)
 	// replacing ext with json
@@ -170,16 +237,22 @@ func (r *Report) CompileFont(filename, encoding string) (string, error) {
 	return compiledFilename, err
 }
 
+// IsCompiledFile checks if the filename exists in Report.FontCompiledPath. This
+// has the suffix "File" instead of "Font" like Report.IsSourcedFont() because
+// this method might be used to check encoding map files as well.
 func (r *Report) IsCompiledFile(filename string) bool {
 	_, err := os.Stat(path.Join(r.FontCompiledPath, filename))
 	return !os.IsNotExist(err)
 }
 
+// IsSourcedFont checks if the font filename exists in Report.FontSourcePath.
 func (r *Report) IsSourcedFont(filename string) bool {
 	_, err := os.Stat(path.Join(r.FontSourcePath, filename))
 	return !os.IsNotExist(err)
 }
 
+// SetGrid sets all page and grid related specifications required to place
+// content. This must be set before any Content() calls are made.
 func (r *Report) SetGrid(
 	orientation string,
 	size string,
@@ -208,6 +281,7 @@ func (r *Report) SetGrid(
 	r.Grid.CalculateColumns()
 }
 
+// SetFontPath tells the Report where to find fonts specified with AddFont().
 func (r *Report) SetFontPath(fontSourcePath string) {
 	r.FontSourcePath = fontSourcePath
 	r.FontCompiledPath = path.Join(fontSourcePath, "_compiled")

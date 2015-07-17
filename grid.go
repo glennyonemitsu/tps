@@ -4,6 +4,8 @@ import (
 	"errors"
 )
 
+// Grid holds all the page and grid specification required for the Report to
+// create new pages and place content.
 type Grid struct {
 	ColumnCount int
 	ColumnWidth float64
@@ -18,6 +20,8 @@ type Grid struct {
 	PageHeight  float64
 }
 
+// CalculateColumns calculates the remaining column related specs based on
+// ColumnCount and GutterWidth.
 func (g *Grid) CalculateColumns() error {
 	if g.ColumnCount == 0 || g.GutterWidth == 0 {
 		return errors.New("Incomplete data to calculate grid columns")
