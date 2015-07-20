@@ -117,6 +117,29 @@ func (r *Report) AddBlock(name string, width, height int) {
 //
 //   r.AddFont("OpenSans-Bold.ttf", "cp1252")
 //   r.AddStyle("header", "OpenSans-Bold", "", 64, AlignmentTop | AlignmentLeft)
+//
+// The following encodings are supported:
+//
+//	 cp1250
+// 	 cp1251
+// 	 cp1252
+// 	 cp1253
+// 	 cp1254
+// 	 cp1255
+// 	 cp1257
+// 	 cp1258
+// 	 cp874
+// 	 iso-8859-1
+// 	 iso-8859-11
+// 	 iso-8859-15
+// 	 iso-8859-16
+// 	 iso-8859-2
+// 	 iso-8859-4
+// 	 iso-8859-5
+// 	 iso-8859-7
+// 	 iso-8859-9
+// 	 koi8-r
+// 	 koi8-u
 func (r *Report) AddFont(filename, encoding string) error {
 	var err error
 	err = r.PrepareFontCompiledPath()
